@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>美食探店 · 菜品上传与评价平台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 自定义星级悬停动画 */
+    .star-btn { transition: transform 0.15s ease; }
+    .star-btn:hover { transform: scale(1.2); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+  <!-- 顶部导航栏 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🍜</span>
+        <h1 class="text-xl font-bold text-slate-900 tracking-tight">杭电味蕾·HDU点评</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="搜索店铺名或菜品名..."
+          class="w-full sm:w-64 px-3.5 py-2 text-sm bg-slate-100 border border-transparent rounded-lg focus:bg-white focus:border-orange-500 focus:outline-none transition"
+        />
+        <select
+          id="sortSelect"
+          class="px-3 py-2 text-sm bg-slate-100 border border-transparent rounded-lg focus:bg-white focus:border-orange-500 focus:outline-none cursor-pointer"
+        >
+          <option value="newest">最新发布</option>
+          <option value="highest">评分最高</option>
+          <option value="mostReviewed">评价最多</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+    
+    <!-- 左侧：上传新菜品表单 -->
+    <aside class="lg:col-span-4">
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 sticky top-24">
+        <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <span>➕</span> 上传店铺与菜品
+        </h2>
+        <form id="dishForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">店铺名称 *</label>
+            <input
+              type="text"
+              id="shopName"
+              required
+              placeholder="例如：杭电二餐黄焖鸡"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">菜品名称 *</label>
+            <input
+              type="text"
+              id="dishName"
+              required
+              placeholder="例如：招牌香辣黄焖鸡（微辣）"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">菜品图片（可选）</label>
+            <input
+              type="file"
+              id="dishImage"
+              accept="image/*"
+              class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-600 hover:file:bg-orange-100 cursor-pointer"
+            />
+            <img id="imagePreview" class="hidden mt-2 w-full h-32 object-cover rounded-lg border border-slate-200" alt="预览图" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">初始评分 *</label>
+            <div id="starSelector" class="flex items-center gap-1 text-2xl text-amber-400 select-none">
+              <button type="button" data-val="1" class="star-btn">★</button>
+              <button type="button" data-val="2" class="star-btn">★</button>
+              <button type="button" data-val="3" class="star-btn">★</button>
+              <button type="button" data-val="4" class="star-btn">★</button>
+              <button type="button" data-val="5" class="star-btn">★</button>
+              <span id="ratingText" class="text-xs text-slate-500 ml-2 font-medium">5 分 (力荐)</span>
+            </div>
+            <input type="hidden" id="initialRating" value="5" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">口味评价 *</label>
+            <textarea
+              id="initialComment"
+              rows="3"
+              required
+              placeholder="写下你的真实体验：分量、价格、口味如何？"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <button
+            type="submit"
+            class="w-full py-2.5 px-4 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-sm rounded-lg shadow-sm transition cursor-pointer"
+          >
+            发布菜品与评价
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- 右侧：菜品展示与追加评价列表 -->
+    <section class="lg:col-span-8 space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">全部菜品 (<span id="dishCount">0</span>)</h2>
+        <button id="resetDemoBtn" class="text-xs text-slate-400 hover:text-slate-600 underline cursor-pointer">
+          恢复默认示例数据
+        </button>
+      </div>
+
+      <!-- 菜品卡片容器 -->
+      <div id="dishList" class="space-y-5"></div>
+    </section>
+
+  </main>
+
+  <script>
+    // 默认示例数据
+    const DEFAULT_DISHES = [
+      {
+        id: '1',
+        shopName: '川渝小馆（文一路店）',
+        dishName: '歌乐山辣子鸡',
+        image: '',
+        createdAt: Date.now() - 3600000 * 5,
+        reviews: [
+          { user: '食客A', rating: 5, comment: '鸡丁炸得外酥里嫩，花椒和干辣椒非常香，麻味十足，下饭神器！', time: '2小时前' },
+          { user: '食客B', rating: 4, comment: '味道很正宗，就是辣椒里找鸡肉需要一点耐心哈哈。', time: '1小时前' }
+        ]
+      },
+      {
+        id: '2',
+        shopName: '老杭州面馆',
+        dishName: '虾爆鳝面',
+        image: '',
+        createdAt: Date.now() - 3600000 * 2,
+        reviews: [
+          { user: '杭城吃货', rating: 5, comment: '鳝片现划现炒，脆嫩无腥味，河虾仁Q弹，汤底浓油赤酱非常鲜。', time: '30分钟前' }
+        ]
+      }
+    ];
+
+    let dishes = JSON.parse(localStorage.getItem('food_review_dishes')) || DEFAULT_DISHES;
+    let uploadedImageBase64 = '';
+
+    // 保存到本地存储
+    function saveData() {
+      try {
+        localStorage.setItem('food_review_dishes', JSON.stringify(dishes));
+      } catch (e) {
+        alert('图片体积过大，本地存储空间已满，请上传较小的图片或清除旧数据。');
+      }
+    }
+
+    // 评分文字映射
+    const RATING_LABELS = {
+      1: '1 分 (踩雷)',
+      2: '2 分 (较差)',
+      3: '3 分 (一般)',
+      4: '4 分 (推荐)',
+      5: '5 分 (力荐)'
+    };
+
+    // 星级选择器交互
+    const starBtns = document.querySelectorAll('#starSelector .star-btn');
+    const initialRatingInput = document.getElementById('initialRating');
+    const ratingText = document.getElementById('ratingText');
+
+    function updateStars(val) {
+      initialRatingInput.value = val;
+      ratingText.textContent = RATING_LABELS[val];
+      starBtns.forEach(btn => {
+        const btnVal = Number(btn.dataset.val);
+        btn.classList.toggle('text-amber-400', btnVal <= val);
+        btn.classList.toggle('text-slate-300', btnVal > val);
+      });
+    }
+    starBtns.forEach(btn => {
+      btn.addEventListener('click', () => updateStars(Number(btn.dataset.val)));
+    });
+
+    // 图片上传预览与压缩处理
+    const dishImageInput = document.getElementById('dishImage');
+    const imagePreview = document.getElementById('imagePreview');
+
+    dishImageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        uploadedImageBase64 = '';
+        imagePreview.classList.add('hidden');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        // 使用 Canvas 压缩图片以节省 localStorage 空间
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxWidth = 600;
+          const scale = Math.min(1, maxWidth / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          uploadedImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+          imagePreview.src = uploadedImageBase64;
+          imagePreview.classList.remove('hidden');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 计算平均分
+    function getAvgRating(reviews) {
+      if (!reviews.length) return 0;
+      const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
+      return (sum / reviews.length).toFixed(1);
+    }
+
+    // 渲染星级图标
+    function renderStarsHTML(score) {
+      const fullStars = Math.round(score);
+      return '★'.repeat(fullStars) + '<span class="text-slate-300">' + '★'.repeat(5 - fullStars) + '</span>';
+    }
+
+    // 防 XSS 转义
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag]));
+    }
+
+    // 渲染列表
+    function renderDishes() {
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      const sortBy = document.getElementById('sortSelect').value;
+      const listEl = document.getElementById('dishList');
+
+      let filtered = dishes.filter(d =>
+        d.shopName.toLowerCase().includes(keyword) ||
+        d.dishName.toLowerCase().includes(keyword)
+      );
+
+      if (sortBy === 'highest') {
+        filtered.sort((a, b) => getAvgRating(b.reviews) - getAvgRating(a.reviews));
+      } else if (sortBy === 'mostReviewed') {
+        filtered.sort((a, b) => b.reviews.length - a.reviews.length);
+      } else {
+        filtered.sort((a, b) => b.createdAt - a.createdAt);
+      }
+
+      document.getElementById('dishCount').textContent = filtered.length;
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `
+          <div class="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-400">
+            <p class="text-4xl mb-2">🍽️</p>
+            <p class="text-sm">没有找到匹配的菜品，快来左侧上传第一道吧！</p>
+          </div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(dish => {
+        const avg = getAvgRating(dish.reviews);
+        return `
+          <article class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition hover:shadow-md">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div class="space-y-1">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                  🏪 ${escapeHTML(dish.shopName)}
+                </span>
+                <h3 class="text-xl font-bold text-slate-900 pt-1">${escapeHTML(dish.dishName)}</h3>
+              </div>
+              <div class="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0 shrink-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-2xl font-extrabold text-orange-500">${avg}</span>
+                  <span class="text-sm text-amber-400 tracking-tighter">${renderStarsHTML(avg)}</span>
+                </div>
+                <span class="text-xs text-slate-400">共 ${dish.reviews.length} 条评价</span>
+              </div>
+            </div>
+
+            ${dish.image ? `<img src="${dish.image}" alt="${escapeHTML(dish.dishName)}" class="mt-4 w-full max-h-64 object-cover rounded-xl border border-slate-100" />` : ''}
+
+            <!-- 评价列表 -->
+            <div class="mt-5 pt-4 border-t border-slate-100 space-y-3">
+              <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">食客评价</h4>
+              <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                ${dish.reviews.map(r => `
+                  <div class="bg-slate-50 p-3 rounded-xl text-sm">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="font-semibold text-slate-700 text-xs">${escapeHTML(r.user)}</span>
+                      <div class="flex items-center gap-2">
+                        <span class="text-amber-400 text-xs">${renderStarsHTML(r.rating)}</span>
+                        <span class="text-slate-400 text-xs">${r.time}</span>
+                      </div>
+                    </div>
+                    <p class="text-slate-600 leading-relaxed">${escapeHTML(r.comment)}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- 追加评价表单 -->
+            <form onsubmit="addReview(event, '${dish.id}')" class="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
+              <select name="rating" class="px-2.5 py-2 text-xs bg-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/30 cursor-pointer">
+                <option value="5">⭐⭐⭐⭐⭐ 5分</option>
+                <option value="4">⭐⭐⭐⭐ 4分</option>
+                <option value="3">⭐⭐⭐ 3分</option>
+                <option value="2">⭐⭐ 2分</option>
+                <option value="1">⭐ 1分</option>
+              </select>
+              <input
+                type="text"
+                name="comment"
+                required
+                placeholder="吃过这道菜？写下你的追加评价..."
+                class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-orange-500"
+              />
+              <button
+                type="submit"
+                class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition cursor-pointer shrink-0"
+              >
+                发布评价
+              </button>
+            </form>
+          </article>
+        `;
+      }).join('');
+    }
+
+    // 提交新菜品
+    document.getElementById('dishForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const shopName = document.getElementById('shopName').value.trim();
+      const dishName = document.getElementById('dishName').value.trim();
+      const rating = Number(document.getElementById('initialRating').value);
+      const comment = document.getElementById('initialComment').value.trim();
+
+      if (!shopName || !dishName || !comment) return;
+
+      const newDish = {
+        id: Date.now().toString(),
+        shopName,
+        dishName,
+        image: uploadedImageBase64,
+        createdAt: Date.now(),
+        reviews: [
+          {
+            user: '匿名食客',
+            rating,
+            comment,
+            time: '刚刚'
+          }
+        ]
+      };
+
+      dishes.unshift(newDish);
+      saveData();
+      renderDishes();
+
+      // 重置表单
+      e.target.reset();
+      uploadedImageBase64 = '';
+      imagePreview.classList.add('hidden');
+      updateStars(5);
+    });
+
+    // 追加评价
+    window.addReview = function(e, dishId) {
+      e.preventDefault();
+      const form = e.target;
+      const rating = Number(form.rating.value);
+      const comment = form.comment.value.trim();
+      if (!comment) return;
+
+      const targetDish = dishes.find(d => d.id === dishId);
+      if (targetDish) {
+        targetDish.reviews.unshift({
+          user: '热心食客',
+          rating,
+          comment,
+          time: '刚刚'
+        });
+        saveData();
+        renderDishes();
+      }
+    };
+
+    // 搜索与排序监听
+    document.getElementById('searchInput').addEventListener('input', renderDishes);
+    document.getElementById('sortSelect').addEventListener('change', renderDishes);
+
+    // 恢复默认数据
+    document.getElementById('resetDemoBtn').addEventListener('click', () => {
+      if (confirm('确定清空当前自定义数据并恢复默认示例吗？')) {
+        dishes = JSON.parse(JSON.stringify(DEFAULT_DISHES));
+        saveData();
+        renderDishes();
+      }
+    });
+
+    // 初始化渲染
+    renderDishes();
+  </script>
+</body>
+</html>
