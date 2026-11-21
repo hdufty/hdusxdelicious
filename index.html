@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>美食探店 · 菜品上传与评价平台</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     /* 自定义星级悬停动画 */
     .star-btn { transition: transform 0.15s ease; }
@@ -12,13 +14,20 @@
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+  <!-- ========== 登录面板 ========== -->
+  <div id="authPanel" class="bg-white border-b border-slate-200 py-3 shadow-sm">
+    <div class="max-w-5xl mx-auto px-4 flex flex-wrap items-center justify-between gap-3">
+      <div id="authInfo"></div>
+      <div id="authForm" class="flex gap-2 flex-wrap items-center"></div>
+    </div>
+  </div>
 
   <!-- 顶部导航栏 -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
     <div class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div class="flex items-center gap-2">
         <span class="text-2xl">🍜</span>
-        <h1 class="text-xl font-bold text-slate-900 tracking-tight">杭电味蕾·HDU点评</h1>
+        <h1 class="text-xl font-bold text-slate-900 tracking-tight">食刻点评 · 店铺菜品库</h1>
       </div>
       <div class="flex items-center gap-2">
         <input
@@ -47,6 +56,7 @@
         <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
           <span>➕</span> 上传店铺与菜品
         </h2>
+        <div id="postTip" class="mb-3 text-sm text-red-500 hidden">请先登录，才能发布菜品</div>
         <form id="dishForm" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">店铺名称 *</label>
@@ -71,14 +81,13 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">菜品图片（可选）</label>
+            <label class="block text-sm font-medium text-slate-700 mb-1">菜品图片链接（填图片URL）</label>
             <input
-              type="file"
-              id="dishImage"
-              accept="image/*"
-              class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-600 hover:file:bg-orange-100 cursor-pointer"
+              type="text"
+              id="dishImageUrl"
+              placeholder="https://xxx.jpg"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:outline-none"
             />
-            <img id="imagePreview" class="hidden mt-2 w-full h-32 object-cover rounded-lg border border-slate-200" alt="预览图" />
           </div>
 
           <div>
@@ -107,7 +116,8 @@
 
           <button
             type="submit"
-            class="w-full py-2.5 px-4 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-sm rounded-lg shadow-sm transition cursor-pointer"
+            id="submitDishBtn"
+            class="w-full py-2.5 px-4 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-sm rounded-lg shadow-sm transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             发布菜品与评价
           </button>
@@ -119,9 +129,6 @@
     <section class="lg:col-span-8 space-y-5">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-bold text-slate-900">全部菜品 (<span id="dishCount">0</span>)</h2>
-        <button id="resetDemoBtn" class="text-xs text-slate-400 hover:text-slate-600 underline cursor-pointer">
-          恢复默认示例数据
-        </button>
       </div>
 
       <!-- 菜品卡片容器 -->
@@ -131,42 +138,14 @@
   </main>
 
   <script>
-    // 默认示例数据
-    const DEFAULT_DISHES = [
-      {
-        id: '1',
-        shopName: '川渝小馆（文一路店）',
-        dishName: '歌乐山辣子鸡',
-        image: '',
-        createdAt: Date.now() - 3600000 * 5,
-        reviews: [
-          { user: '食客A', rating: 5, comment: '鸡丁炸得外酥里嫩，花椒和干辣椒非常香，麻味十足，下饭神器！', time: '2小时前' },
-          { user: '食客B', rating: 4, comment: '味道很正宗，就是辣椒里找鸡肉需要一点耐心哈哈。', time: '1小时前' }
-        ]
-      },
-      {
-        id: '2',
-        shopName: '老杭州面馆',
-        dishName: '虾爆鳝面',
-        image: '',
-        createdAt: Date.now() - 3600000 * 2,
-        reviews: [
-          { user: '杭城吃货', rating: 5, comment: '鳝片现划现炒，脆嫩无腥味，河虾仁Q弹，汤底浓油赤酱非常鲜。', time: '30分钟前' }
-        ]
-      }
-    ];
+    // ========== 这里改成你自己的supabase信息 ==========
+    const SUPABASE_URL = "https://eewjsxukpcokhazptwhm.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_RtMxCp9oXcLS3h8QNzYGQQ_Ym-9JC17";
+    // ================================================
 
-    let dishes = JSON.parse(localStorage.getItem('food_review_dishes')) || DEFAULT_DISHES;
-    let uploadedImageBase64 = '';
-
-    // 保存到本地存储
-    function saveData() {
-      try {
-        localStorage.setItem('food_review_dishes', JSON.stringify(dishes));
-      } catch (e) {
-        alert('图片体积过大，本地存储空间已满，请上传较小的图片或清除旧数据。');
-      }
-    }
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let user = null;
+    let isAdmin = false;
 
     // 评分文字映射
     const RATING_LABELS = {
@@ -194,38 +173,7 @@
     starBtns.forEach(btn => {
       btn.addEventListener('click', () => updateStars(Number(btn.dataset.val)));
     });
-
-    // 图片上传预览与压缩处理
-    const dishImageInput = document.getElementById('dishImage');
-    const imagePreview = document.getElementById('imagePreview');
-
-    dishImageInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) {
-        uploadedImageBase64 = '';
-        imagePreview.classList.add('hidden');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        // 使用 Canvas 压缩图片以节省 localStorage 空间
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxWidth = 600;
-          const scale = Math.min(1, maxWidth / img.width);
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          uploadedImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
-          imagePreview.src = uploadedImageBase64;
-          imagePreview.classList.remove('hidden');
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
+    updateStars(5);
 
     // 计算平均分
     function getAvgRating(reviews) {
@@ -242,20 +190,37 @@
 
     // 防 XSS 转义
     function escapeHTML(str) {
+      if(!str) return '';
       return str.replace(/[&<>'"]/g, tag => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
       }[tag]));
     }
 
+    // 格式化时间
+    function formatTime(isoStr) {
+      const d = new Date(isoStr);
+      return d.toLocaleString('zh-CN');
+    }
+
+    // 加载菜品+评价
+    async function loadDishes() {
+      const {data:dishes, error:dErr} = await supabase
+        .from('dishes')
+        .select('*, reviews(*)')
+        .order('created_at', {asc:false});
+      if(dErr) return console.error(dErr);
+      renderDishes(dishes);
+    }
+
     // 渲染列表
-    function renderDishes() {
+    function renderDishes(dishes) {
       const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
       const sortBy = document.getElementById('sortSelect').value;
       const listEl = document.getElementById('dishList');
 
       let filtered = dishes.filter(d =>
-        d.shopName.toLowerCase().includes(keyword) ||
-        d.dishName.toLowerCase().includes(keyword)
+        d.shop_name.toLowerCase().includes(keyword) ||
+        d.dish_name.toLowerCase().includes(keyword)
       );
 
       if (sortBy === 'highest') {
@@ -263,7 +228,7 @@
       } else if (sortBy === 'mostReviewed') {
         filtered.sort((a, b) => b.reviews.length - a.reviews.length);
       } else {
-        filtered.sort((a, b) => b.createdAt - a.createdAt);
+        filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       }
 
       document.getElementById('dishCount').textContent = filtered.length;
@@ -272,44 +237,48 @@
         listEl.innerHTML = `
           <div class="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-400">
             <p class="text-4xl mb-2">🍽️</p>
-            <p class="text-sm">没有找到匹配的菜品，快来左侧上传第一道吧！</p>
+            <p class="text-sm">没有找到匹配的菜品</p>
           </div>`;
         return;
       }
 
       listEl.innerHTML = filtered.map(dish => {
-        const avg = getAvgRating(dish.reviews);
+        const avg = getAvgRating(dish.reviews || []);
+        // 权限：自己的 or 管理员，可以删
+        const canEdit = user && (user.id === dish.user_id || isAdmin);
         return `
           <article class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition hover:shadow-md">
             <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div class="space-y-1">
                 <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                  🏪 ${escapeHTML(dish.shopName)}
+                  🏪 ${escapeHTML(dish.shop_name)}
                 </span>
-                <h3 class="text-xl font-bold text-slate-900 pt-1">${escapeHTML(dish.dishName)}</h3>
+                <h3 class="text-xl font-bold text-slate-900 pt-1">${escapeHTML(dish.dish_name)}</h3>
+                <div class="text-xs text-slate-400">发布者：${escapeHTML(dish.user_id.slice(0,12))} ${canEdit?'✅可管理':''}</div>
               </div>
               <div class="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0 shrink-0">
                 <div class="flex items-center gap-1.5">
                   <span class="text-2xl font-extrabold text-orange-500">${avg}</span>
                   <span class="text-sm text-amber-400 tracking-tighter">${renderStarsHTML(avg)}</span>
                 </div>
-                <span class="text-xs text-slate-400">共 ${dish.reviews.length} 条评价</span>
+                <span class="text-xs text-slate-400">共 ${(dish.reviews||[]).length} 条评价</span>
+                ${canEdit?`<button onclick="deleteDish('${dish.id}')" class="mt-2 text-xs text-red-500 hover:underline">删除这条菜品</button>`:''}
               </div>
             </div>
 
-            ${dish.image ? `<img src="${dish.image}" alt="${escapeHTML(dish.dishName)}" class="mt-4 w-full max-h-64 object-cover rounded-xl border border-slate-100" />` : ''}
+            ${dish.image ? `<img src="${escapeHTML(dish.image)}" alt="${escapeHTML(dish.dish_name)}" class="mt-4 w-full max-h-64 object-cover rounded-xl border border-slate-100" />` : ''}
 
             <!-- 评价列表 -->
             <div class="mt-5 pt-4 border-t border-slate-100 space-y-3">
               <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">食客评价</h4>
               <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                ${dish.reviews.map(r => `
+                ${(dish.reviews||[]).map(r => `
                   <div class="bg-slate-50 p-3 rounded-xl text-sm">
                     <div class="flex items-center justify-between mb-1">
-                      <span class="font-semibold text-slate-700 text-xs">${escapeHTML(r.user)}</span>
+                      <span class="font-semibold text-slate-700 text-xs">${escapeHTML(r.user_id.slice(0,12))}</span>
                       <div class="flex items-center gap-2">
                         <span class="text-amber-400 text-xs">${renderStarsHTML(r.rating)}</span>
-                        <span class="text-slate-400 text-xs">${r.time}</span>
+                        <span class="text-slate-400 text-xs">${formatTime(r.created_at)}</span>
                       </div>
                     </div>
                     <p class="text-slate-600 leading-relaxed">${escapeHTML(r.comment)}</p>
@@ -331,12 +300,14 @@
                 type="text"
                 name="comment"
                 required
-                placeholder="吃过这道菜？写下你的追加评价..."
+                placeholder="${user?'写下追加评价...':'登录后才能写评价'}"
                 class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-orange-500"
+                ${!user?'disabled':''}
               />
               <button
                 type="submit"
-                class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition cursor-pointer shrink-0"
+                class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium rounded-lg transition cursor-pointer shrink-0 disabled:opacity-40"
+                ${!user?'disabled':''}
               >
                 发布评价
               </button>
@@ -346,79 +317,129 @@
       }).join('');
     }
 
+    // 删除菜品
+    window.deleteDish = async function(dishId) {
+      if(!confirm('确定删除？')) return;
+      await supabase.from('dishes').delete().eq('id', dishId);
+      loadDishes();
+    }
+
     // 提交新菜品
-    document.getElementById('dishForm').addEventListener('submit', (e) => {
+    document.getElementById('dishForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if(!user) return alert('请登录');
       const shopName = document.getElementById('shopName').value.trim();
       const dishName = document.getElementById('dishName').value.trim();
       const rating = Number(document.getElementById('initialRating').value);
       const comment = document.getElementById('initialComment').value.trim();
+      const image = document.getElementById('dishImageUrl').value.trim();
 
-      if (!shopName || !dishName || !comment) return;
+      const {data:dish, errDish} = await supabase.from('dishes').insert({
+        user_id: user.id,
+        shop_name: shopName,
+        dish_name: dishName,
+        image: image || null
+      }).select().single();
+      if(errDish) return alert('发布菜品失败 '+errDish.message);
 
-      const newDish = {
-        id: Date.now().toString(),
-        shopName,
-        dishName,
-        image: uploadedImageBase64,
-        createdAt: Date.now(),
-        reviews: [
-          {
-            user: '匿名食客',
-            rating,
-            comment,
-            time: '刚刚'
-          }
-        ]
-      };
-
-      dishes.unshift(newDish);
-      saveData();
-      renderDishes();
-
-      // 重置表单
+      // 同时插入第一条评价
+      await supabase.from('reviews').insert({
+        dish_id: dish.id,
+        user_id: user.id,
+        rating,
+        comment
+      })
       e.target.reset();
-      uploadedImageBase64 = '';
-      imagePreview.classList.add('hidden');
       updateStars(5);
+      loadDishes();
     });
 
     // 追加评价
-    window.addReview = function(e, dishId) {
+    window.addReview = async function(e, dishId) {
       e.preventDefault();
+      if(!user) return alert('请登录');
       const form = e.target;
       const rating = Number(form.rating.value);
       const comment = form.comment.value.trim();
       if (!comment) return;
 
-      const targetDish = dishes.find(d => d.id === dishId);
-      if (targetDish) {
-        targetDish.reviews.unshift({
-          user: '热心食客',
-          rating,
-          comment,
-          time: '刚刚'
-        });
-        saveData();
-        renderDishes();
-      }
+      const {err} = await supabase.from('reviews').insert({
+        dish_id:dishId,
+        user_id:user.id,
+        rating,
+        comment
+      })
+      if(err) alert(err.message);
+      loadDishes();
     };
 
     // 搜索与排序监听
-    document.getElementById('searchInput').addEventListener('input', renderDishes);
-    document.getElementById('sortSelect').addEventListener('change', renderDishes);
+    document.getElementById('searchInput').addEventListener('input', ()=>loadDishes());
+    document.getElementById('sortSelect').addEventListener('change', ()=>loadDishes());
 
-    // 恢复默认数据
-    document.getElementById('resetDemoBtn').addEventListener('click', () => {
-      if (confirm('确定清空当前自定义数据并恢复默认示例吗？')) {
-        dishes = JSON.parse(JSON.stringify(DEFAULT_DISHES));
-        saveData();
-        renderDishes();
+    // 登录渲染
+    function renderAuth() {
+      const infoEl = document.getElementById('authInfo');
+      const formEl = document.getElementById('authForm');
+      const postTip = document.getElementById('postTip');
+      const submitBtn = document.getElementById('submitDishBtn');
+      if(user){
+        infoEl.innerHTML = `<span class="font-medium">✅ 已登录：${user.email}</span> ${isAdmin?'<span class="text-orange-500 font-bold">[管理员]</span>':''}`;
+        formEl.innerHTML = `<button onclick="signOut()" class="px-3 py-1.5 bg-slate-700 text-white rounded-lg text-sm">退出登录</button>`;
+        postTip.classList.add('hidden');
+        submitBtn.disabled = false;
+      }else{
+        infoEl.innerHTML = `<span class="text-slate-500">🔐 未登录（只能浏览）</span>`;
+        formEl.innerHTML = `
+          <input id="loginEmail" placeholder="邮箱" class="px-2 py-1.5 border rounded text-sm">
+          <input id="loginPwd" type="password" placeholder="密码" class="px-2 py-1.5 border rounded text-sm">
+          <button onclick="signIn()" class="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-sm">登录</button>
+          <button onclick="signUp()" class="px-3 py-1.5 bg-slate-200 rounded-lg text-sm">注册</button>
+        `;
+        postTip.classList.remove('hidden');
+        submitBtn.disabled = true;
       }
-    });
+    }
 
-    // 初始化渲染
-    renderDishes();
+    window.signIn = async function(){
+      const email = document.getElementById('loginEmail').value;
+      const pwd = document.getElementById('loginPwd').value;
+      const {data,err}=await supabase.auth.signInWithPassword({email,password:pwd})
+      if(err) alert(err.message);
+    }
+    window.signUp = async function(){
+      const email = document.getElementById('loginEmail').value;
+      const pwd = document.getElementById('loginPwd').value;
+      const {data,err}=await supabase.auth.signUp({email,password:pwd})
+      if(err) alert(err.message);
+      else alert('注册成功，请登录');
+    }
+    window.signOut = async function(){
+      await supabase.auth.signOut();
+    }
+
+    // 检查是否管理员
+    async function checkAdmin(uid){
+      const {data} = await supabase.from('admins').select().eq('user_id',uid).maybeSingle();
+      isAdmin = !!data;
+    }
+
+    // 监听登录状态
+    supabase.auth.onAuthStateChange(async (event,session)=>{
+      if(session?.user){
+        user = session.user;
+        await checkAdmin(user.id);
+      }else{
+        user=null;
+        isAdmin=false;
+      }
+      renderAuth();
+      loadDishes();
+    })
+
+    // 初始化
+    renderAuth();
+    loadDishes();
   </script>
 </body>
 </html>
